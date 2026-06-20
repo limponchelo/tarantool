@@ -51,6 +51,20 @@ g.test_decimal_zero_fits_fixed_point = function(cg)
         end), "decimal.new('0.000000000') fits")
 
         t.assert(pcall(function()
+        box.space.test:replace{1, decimal.new('-0.000000000')}
+        end), "decimal.new('-0.000000000') fits")
+
+        t.assert(pcall(function()
+        box.space.test:replace{1, decimal.new(
+        '0.' .. string.rep('0', 1000)
+        )}
+        end), 'decimal32: zero with 1000 zero digits still fits')
+
+        t.assert(pcall(function()
+            box.space.test:replace{1, decimal.new('0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000')}
+         end), "decimal.new('0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000') fits")
+
+        t.assert(pcall(function()
             box.space.test:replace{1, decimal.new('0.000000001')}
         end), 'smallest non-zero value fits')
 
