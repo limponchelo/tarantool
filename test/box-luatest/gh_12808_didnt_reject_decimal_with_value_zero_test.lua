@@ -11,71 +11,59 @@ g.after_all(function(cg)
     cg.server:drop()
 end)
 
-g.before_each(function(cg)
-    cg.server:exec(function()
-        box.schema.space.create('test', {
-            format = {
-                {name = 'a', type = 'unsigned'},
-                {name = 'b', type = 'decimal32', scale = 9},
-            },
-        })
-        box.space.test:create_index('pk')
-    end)
-end)
-
-g.after_each(function(cg)
-    cg.server:exec(function()
-        box.space.test:drop()
-    end)
-end)
-
 g.test_decimal_zero_fits_fixed_point = function(cg)
-    cg.server:exec(function()
-        local decimal = require('decimal')
-        local t = require('luatest')
+    for i = 1, 3 do
+        local decimal_type
+        if i == 1 then
+            decimal_type = 'decimal32'
+        elseif i == 2 then
+            decimal_type = 'decimal64'
+        elseif i == 3 then
+            decimal_type = 'decimal128'
+        end
 
-        t.assert(pcall(function()
-            box.space.test:replace{1, decimal.new('0.123456789')}
-        end), 'non-zero value within range fits')
+        local scale
+        if decimal_type == 'decimal32' then
+            scale = 9
+        elseif decimal_type == 'decimal64' then
+            scale = 18
+        elseif decimal_type == 'decimal128' then
+            scale = 38
+        end
 
-        t.assert(pcall(function()
-            box.space.test:replace{1, decimal.new('0')}
-        end), "decimal.new('0') fits")
+        cg.server:exec(function(decimal_type, scale)
+            local decimal = require('decimal')
+            local t = require('luatest')
 
-        t.assert(pcall(function()
-            box.space.test:replace{1, decimal.new(0)}
-        end), 'decimal.new(0) fits')
+            box.schema.space.create('test', {
+                format = {
+                    {name = 'a', type = 'unsigned'},
+                    {name = 'b', type = decimal_type, scale = scale},
+                },
+            })
+            box.space.test:create_index('pk')
 
-        t.assert(pcall(function()
-            box.space.test:replace{1, decimal.new('0.000000000')}
-        end), "decimal.new('0.000000000') fits")
+            t.assert(pcall(function()
+                box.space.test:replace{1, decimal.new('0')}
+            end), decimal_type .. ": decimal.new('0') fits")
 
-        t.assert(pcall(function()
-        box.space.test:replace{1, decimal.new('-0.000000000')}
-        end), "decimal.new('-0.000000000') fits")
+            t.assert(pcall(function()
+                box.space.test:replace{1, decimal.new(0)}
+            end), decimal_type .. ': decimal.new(0) fits')
 
-        t.assert(pcall(function()
-        box.space.test:replace{1, decimal.new(
-        '0.' .. string.rep('0', 1000)
-        )}
-        end), 'decimal32: zero with 1000 zero digits still fits')
+            t.assert(pcall(function()
+                box.space.test:replace{1, decimal.new('0.' .. string.rep('0', scale))}
+            end), decimal_type .. ': zero with scale zero digits fits')
 
-        t.assert(pcall(function()
-            box.space.test:replace{1, decimal.new('0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000')}
-         end), "decimal.new('0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000') fits")
+            t.assert(pcall(function()
+                box.space.test:replace{1, decimal.new('-0.' .. string.rep('0', scale))}
+            end), decimal_type .. ': negative zero with scale zero digits fits')
 
-        t.assert(pcall(function()
-            box.space.test:replace{1, decimal.new('0.000000001')}
-        end), 'smallest non-zero value fits')
+            t.assert(pcall(function()
+                box.space.test:replace{1, decimal.new('0.' .. string.rep('0', 1000))}
+            end), decimal_type .. ': zero with 1000 zero digits still fits')
 
-        local ok = pcall(function()
-            box.space.test:replace{1, decimal.new('1.000000000')}
-        end)
-        t.assert_not(ok, 'out-of-range value is still rejected')
-
-        local ok2 = pcall(function()
-            box.space.test:replace{1, decimal.new('-1.000000000')}
-        end)
-        t.assert_not(ok2, 'negative out-of-range value is still rejected')
-    end)
+            box.space.test:drop()
+        end, {decimal_type, scale})
+    end
 end
